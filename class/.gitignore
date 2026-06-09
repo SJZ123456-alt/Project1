@@ -1,0 +1,36 @@
+# Visual Studio 核心隐藏缓存文件夹 (体积最大的罪魁祸首)
+.vs/
+
+# 编译输出文件夹
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+
+# 各种编译生成的临时文件和二进制文件
+*.obj
+*.exe
+*.pdb
+*.user
+*.aps
+*.pch
+*.vspscc
+*.vssscc
+*.ncb
+*.suo
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.log
+*.lib
+*.sbr
+*.sdf
+*.ipch
+*.db
