@@ -26,11 +26,12 @@ class CourseSystem {
 private:
     vector<Course> courses;
     vector<MajorInfo> majors;
-    // ✅ 新增：存储排课约束警告
+    // 存储排课约束警告
     vector<string> scheduleWarnings;
 
 public:
     int maxCoursesPerTerm, maxCreditsPerTerm, maxPoliticsPerTerm;
+    int maxTerms; // 新增：最大排课学期限制（通常为 8 学期）
 
     CourseSystem();
     void setColor(int color);

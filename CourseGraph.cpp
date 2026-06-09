@@ -14,9 +14,9 @@
 
 using namespace std;
 
-// 【乱码粉碎机】UTF-8 -> GBK（static 避免 ODR，解决 VCR003）
+// UTF-8 -> GBK
 static string UTF8ToGBK(const string& str_utf8) {
-    int len = MultiByteToWideChar(CP_UTF8, 0, str_utf8.c_str(), -1, NULL, 0); // ✅ 改为 int，解决 C4267
+    int len = MultiByteToWideChar(CP_UTF8, 0, str_utf8.c_str(), -1, NULL, 0);
     if (len <= 0) return str_utf8;
     wchar_t* wszGBK = new wchar_t[len + 1];
     memset(wszGBK, 0, static_cast<size_t>(len) * 2 + 2);
@@ -34,7 +34,8 @@ static string UTF8ToGBK(const string& str_utf8) {
 CourseSystem::CourseSystem()
     : maxCoursesPerTerm(6),
     maxCreditsPerTerm(16),
-    maxPoliticsPerTerm(1) {
+    maxPoliticsPerTerm(2), // 调整为 2：允许同一学期排 2 门公选/外语/思政，解决 8 学期内排不完 9 门公共课的硬性冲突
+    maxTerms(8) {          // 限制最大为 8 学期
 }
 
 void CourseSystem::setColor(int color) {
@@ -51,7 +52,6 @@ void CourseSystem::clearData() {
     majors.clear();
 }
 
-// ✅ 已实现：解决 VCR001（未找到函数定义）
 void CourseSystem::clearScheduleWarnings() {
     scheduleWarnings.clear();
 }
@@ -66,7 +66,6 @@ int CourseSystem::findCourseIndex(string id) {
 void CourseSystem::addCourse(string id, string name, int credit, int type, int season, string major) {
     if (findCourseIndex(id) == -1) {
         courses.emplace_back(id, name, credit, type, season, major);
-        // ✅ 显式初始化 assignedTerm = -1（解决 C26495）
         courses.back().assignedTerm = -1;
     }
 }
@@ -110,12 +109,11 @@ bool CourseSystem::loadFromFile(string filename) {
     file.close();
     return true;
 }
-// 1. 优化后的环检测：仅针对当前专业及公共课
+
 bool CourseSystem::hasCycle(string targetMajor) {
     enum Color { WHITE, GRAY, BLACK };
     vector<Color> color(courses.size(), WHITE);
 
-    // 判断课程是否属于当前处理的专业（包含公选课 "ALL"）
     auto isRelevant = [&](int idx) {
         if (idx < 0 || idx >= static_cast<int>(courses.size())) return false;
         const auto& c = courses[idx];
@@ -125,7 +123,7 @@ bool CourseSystem::hasCycle(string targetMajor) {
     function<bool(int)> dfs = [&](int u) -> bool {
         color[u] = GRAY;
         for (int v : courses[u].nextCourses) {
-            if (!isRelevant(v)) continue; // 忽略非本专业相关的课程节点
+            if (!isRelevant(v)) continue;
             if (color[v] == GRAY) return true;
             if (color[v] == WHITE && dfs(v)) return true;
         }
@@ -140,6 +138,7 @@ bool CourseSystem::hasCycle(string targetMajor) {
     }
     return false;
 }
+
 bool CourseSystem::generateSchedule(string targetMajor) {
     clearScheduleWarnings();
 
@@ -160,14 +159,13 @@ bool CourseSystem::generateSchedule(string targetMajor) {
     vector<int> currentInDegree(courses.size(), 0);
     for (size_t i = 0; i < courses.size(); ++i) {
         if (isRelevant(static_cast<int>(i))) {
-            courses[i].assignedTerm = -1; // 待分配
+            courses[i].assignedTerm = -1;
         }
         else {
-            courses[i].assignedTerm = -99; // 非本专业课程忽略
+            courses[i].assignedTerm = -99;
         }
     }
 
-    // 计算初始入度
     for (size_t i = 0; i < courses.size(); ++i) {
         if (courses[i].assignedTerm == -1) {
             for (int v : courses[i].nextCourses) {
@@ -178,7 +176,7 @@ bool CourseSystem::generateSchedule(string targetMajor) {
         }
     }
 
-    // 2. 【核心改进】在正式排课前预先消除循环依赖，转换为标准有向无环图 (DAG)
+    // 2. 预先消除循环依赖
     vector<int> tempInDegree = currentInDegree;
     queue<int> tempQ;
     for (size_t i = 0; i < courses.size(); ++i) {
@@ -202,7 +200,6 @@ bool CourseSystem::generateSchedule(string targetMajor) {
             }
         }
 
-        // 如果仍有未访问的课程，说明存在环，寻找未访问且入度最小的课程来打破死锁
         int bestU = -1;
         int minInDegree = 1e9;
         for (size_t i = 0; i < courses.size(); ++i) {
@@ -217,7 +214,7 @@ bool CourseSystem::generateSchedule(string targetMajor) {
         if (bestU != -1) {
             tempInDegree[bestU] = 0;
             tempQ.push(bestU);
-            currentInDegree[bestU] = 0; // 修改真实的排课入度，使其在第 1 学期就能直接入队
+            currentInDegree[bestU] = 0;
             scheduleWarnings.push_back(
                 "[提示] 已自动解除课程[" + courses[bestU].name + "(" + courses[bestU].id + ")]的先修限制（用于打破循环依赖）"
             );
@@ -237,14 +234,13 @@ bool CourseSystem::generateSchedule(string targetMajor) {
 
     int currentTerm = 1;
 
-    while (!q.empty() && currentTerm <= 20) {
+    while (!q.empty() && currentTerm <= maxTerms) {
         int levelSize = q.size();
         vector<int> deferred;
 
         for (int i = 0; i < levelSize; ++i) {
             int u = q.front(); q.pop();
 
-            // 统计当前学期已安排情况
             int termCourseCnt = 0, termCreditSum = 0, termPoliticsCnt = 0;
             for (auto& c : courses) {
                 if (c.assignedTerm == currentTerm) {
@@ -254,7 +250,6 @@ bool CourseSystem::generateSchedule(string targetMajor) {
                 }
             }
 
-            // 考虑学期季节约束（1=秋季/单学期，2=春季/双学期，0/其他=无限制）
             bool seasonOK = (courses[u].season != 1 && courses[u].season != 2) ||
                 (courses[u].season == 1 && currentTerm % 2 != 0) ||
                 (courses[u].season == 2 && currentTerm % 2 == 0);
@@ -266,7 +261,6 @@ bool CourseSystem::generateSchedule(string targetMajor) {
 
             if (canPlace) {
                 courses[u].assignedTerm = currentTerm;
-                // 更新后继
                 for (int v : courses[u].nextCourses) {
                     if (courses[v].assignedTerm == -1) {
                         if (--currentInDegree[v] == 0) {
@@ -280,14 +274,13 @@ bool CourseSystem::generateSchedule(string targetMajor) {
             }
         }
 
-        // 未放入的课程留到下学期尝试
         for (int u : deferred) {
             q.push(u);
         }
         currentTerm++;
     }
 
-    // 第二阶段：对极端容量约束下的遗留课程进行补录分配
+    // 第二阶段：补录分配
     vector<int> unassigned;
     for (size_t i = 0; i < courses.size(); ++i) {
         if (courses[i].assignedTerm == -1 && isRelevant(static_cast<int>(i))) {
@@ -297,7 +290,7 @@ bool CourseSystem::generateSchedule(string targetMajor) {
 
     for (int u : unassigned) {
         bool placed = false;
-        for (int t = 1; t <= 20; ++t) {
+        for (int t = 1; t <= maxTerms; ++t) {
             bool prereqOK = true;
             for (int v = 0; v < static_cast<int>(courses.size()); ++v) {
                 if (find(courses[v].nextCourses.begin(), courses[v].nextCourses.end(), u) != courses[v].nextCourses.end()) {
@@ -337,7 +330,7 @@ bool CourseSystem::generateSchedule(string targetMajor) {
 
         if (!placed) {
             scheduleWarnings.push_back(
-                "[严重] 课程[" + courses[u].name + "(" + courses[u].id + ")] 因硬性约束限制无法安排"
+                "[严重] 课程[" + courses[u].name + "(" + courses[u].id + ")] 因硬性约束限制无法在前 " + to_string(maxTerms) + " 学期内安排"
             );
         }
     }
@@ -345,9 +338,7 @@ bool CourseSystem::generateSchedule(string targetMajor) {
     return true;
 }
 
-// ✅ displaySchedule：动态统计每学期数据，不再引用任何未声明变量！
 void CourseSystem::displaySchedule(string targetMajor, string majorName) {
-    // 输出警告
     if (!scheduleWarnings.empty()) {
         setColor(14);
         cout << "\n===== 排课约束与异常提示 =====\n";
@@ -362,13 +353,12 @@ void CourseSystem::displaySchedule(string targetMajor, string majorName) {
     cout << "\n================ [" << majorName << " 专业] 培养方案 ================\n";
     setColor(7);
 
-    // ✅ 动态统计：基于 courses.assignedTerm
-    vector<int> termCourses(21, 0);
-    vector<int> termCredits(21, 0);
-    vector<int> termPolitics(21, 0);
+    vector<int> termCourses(maxTerms + 1, 0);
+    vector<int> termCredits(maxTerms + 1, 0);
+    vector<int> termPolitics(maxTerms + 1, 0);
 
     for (auto& c : courses) {
-        if (c.assignedTerm >= 1 && c.assignedTerm <= 20) {
+        if (c.assignedTerm >= 1 && c.assignedTerm <= maxTerms) {
             int t = c.assignedTerm;
             termCourses[t]++;
             termCredits[t] += c.credit;
@@ -376,13 +366,13 @@ void CourseSystem::displaySchedule(string targetMajor, string majorName) {
         }
     }
 
-    // 找最大学期
     int maxT = 0;
     for (auto& c : courses) {
-        if (c.assignedTerm > maxT) maxT = c.assignedTerm;
+        if (c.assignedTerm > maxT && c.assignedTerm <= maxTerms) {
+            maxT = c.assignedTerm;
+        }
     }
 
-    // 检查未安排课程
     bool has_unscheduled = false;
     for (auto& c : courses) {
         if (c.assignedTerm == -1 && (c.major == "ALL" || c.major.find(targetMajor) != string::npos)) {
@@ -393,7 +383,7 @@ void CourseSystem::displaySchedule(string targetMajor, string majorName) {
 
     if (has_unscheduled) {
         setColor(12);
-        cout << "[注意] 以下课程因约束或先修关系未能安排到学期中:\n";
+        cout << "[注意] 以下课程因约束或先修关系未能成功安排在 " << maxTerms << " 个学期内:\n";
         for (auto& c : courses) {
             if (c.assignedTerm == -1 && (c.major == "ALL" || c.major.find(targetMajor) != string::npos)) {
                 cout << " - " << (c.type == 1 ? "[公]" : "[专]") << " " << c.name << "(" << c.credit << "学分)\n";
@@ -402,7 +392,6 @@ void CourseSystem::displaySchedule(string targetMajor, string majorName) {
         setColor(7);
     }
 
-    // 输出课表（跳过空学期）
     for (int t = 1; t <= maxT; ++t) {
         if (termCourses[t] == 0) continue;
         setColor(14);
@@ -466,12 +455,11 @@ void CourseSystem::startMenu() {
 
             generateSchedule(mCode);
 
-            // 统计
             int scheduled = 0, total = 0;
             for (auto& c : courses) {
                 if (c.major == "ALL" || c.major.find(mCode) != string::npos) {
                     total++;
-                    if (c.assignedTerm != -1) scheduled++;
+                    if (c.assignedTerm != -1 && c.assignedTerm <= maxTerms) scheduled++;
                 }
             }
 
