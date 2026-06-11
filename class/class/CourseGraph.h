@@ -1,38 +1,41 @@
 #pragma once
 #include <string>
-#include <vector>
+#include "MyVector.h"
 
 using namespace std;
 
 struct MajorNode {
     string code;
     string name;
+
+    MajorNode() {}
     MajorNode(string c, string n) : code(c), name(n) {}
 };
 
 struct Course {
-    string id; 
-    string name; 
-    int credit; 
-    int type; 
-    int season; 
+    string id;
+    string name;
+    int credit;
+    int type;
+    int season;
     string major;
 
-    int inDegree; 
-    int outDegree; 
+    int inDegree;
+    int outDegree;
     int assignedTerm;
 
-    vector<int> nextCourses; // 邻接表
+    MyVector<int> nextCourses;
 
+    Course() : credit(0), type(0), season(0), inDegree(0), outDegree(0), assignedTerm(-1) {}
 
-    Course(string i, string n, int c, int t, int s, string m): id(i), name(n), credit(c), type(t), season(s), major(m), inDegree(0), outDegree(0), assignedTerm(-1) {}
+    Course(string i, string n, int c, int t, int s, string m) : id(i), name(n), credit(c), type(t), season(s), major(m), inDegree(0), outDegree(0), assignedTerm(-1) {}
 
 };
 
 class CourseSystem {
 private:
-    vector<MajorNode> majorList; // 专业顺序表
-    vector<Course> courses;      // 课程图的顶点顺序表
+    MyVector<MajorNode> majorList;
+    MyVector<Course> courses;
     int maxCoursesPerTerm;
     int maxCreditsPerTerm;
     int maxPoliticsPerTerm;

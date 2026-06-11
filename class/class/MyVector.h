@@ -10,7 +10,7 @@ private:
     void expand() {
         capacity *= 2;
         T* newData = new T[capacity];
-        for (int i = 0; i < length; i++) 
+        for (int i = 0; i < length; i++)
         {
             newData[i] = data[i];
         }
@@ -19,31 +19,31 @@ private:
     }
 
 public:
-    MyVector() : capacity(10), length(0) 
+    MyVector() : capacity(10), length(0)
     {
         data = new T[capacity];
     }
 
-    MyVector(const MyVector& other) 
+    MyVector(const MyVector& other)
     {
         capacity = other.capacity;
         length = other.length;
         data = new T[capacity];
-        for (int i = 0; i < length; i++) 
+        for (int i = 0; i < length; i++)
         {
             data[i] = other.data[i];
         }
     }
 
-    MyVector& operator=(const MyVector& other) 
+    MyVector& operator=(const MyVector& other)
     {
-        if (this != &other) 
+        if (this != &other)
         {
             delete[] data;
             capacity = other.capacity;
             length = other.length;
             data = new T[capacity];
-            for (int i = 0; i < length; i++) 
+            for (int i = 0; i < length; i++)
             {
                 data[i] = other.data[i];
             }
@@ -51,27 +51,32 @@ public:
         return *this;
     }
 
-    ~MyVector() 
+    ~MyVector()
     {
         delete[] data;
     }
 
-    void push_back(T val) 
+    void push_back(T val)
     {
         if (length == capacity) expand();
         data[length++] = val;
     }
 
-    int size() const 
-    { 
-        return length; 
+    void clear()
+    {
+        length = 0;
     }
 
-    T& operator[](int i) 
+    int size() const
+    {
+        return length;
+    }
+
+    T& operator[](int i)
     {
         return data[i];
     }
-    const T& operator[](int i) const 
+    const T& operator[](int i) const
     {
         return data[i];
     }
